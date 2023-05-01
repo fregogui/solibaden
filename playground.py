@@ -1,8 +1,11 @@
 import csv
+import hashlib
+import random
 import uuid
 from dataclasses import dataclass
 from enum import Enum
 from functools import cached_property
+from typing import Any
 
 
 @dataclass
@@ -41,6 +44,28 @@ class Move:
 
     def __str__(self):
         return f"Move from (x,y)=({self.pos.x}, {self.pos.y}) to {self.direction}"
+
+
+def bool_str(value: Any) -> str:
+    return "1" if value else "0"
+
+
+def get_map_id(_map: MapT) -> str:
+    return hashlib.sha256(
+        "-".join(
+            [
+                ":".join(
+                    [
+                        bool_str(row.ball),
+                        bool_str(row.is_valid),
+                        str(row.pos.x),
+                        str(row.pos.y),
+                    ]
+                )
+                for row in sorted(_map.values(), key=lambda row: (row.pos.x, row.pos.y))
+            ]
+        ).encode("utf-8")
+    ).hexdigest()
 
 
 @dataclass
@@ -113,10 +138,13 @@ class Round:
     def is_blocked(self) -> bool:
         return len(self.possible_moves) == 0
 
-    @property
-    def random_move(self) -> Move | None:
-        if not self.is_blocked:
-            return next(iter(self.possible_moves))
+    def random_move(self, excluded_moves: set[Move] | None = None) -> Move | None:
+        if excluded_moves:
+            possible_moves = list(self.possible_moves - excluded_moves)
+        else:
+            possible_moves = list(self.possible_moves)
+        if not self.is_blocked and possible_moves:
+            return random.choice(possible_moves)
 
     @cached_property
     def ball_count(self) -> int:
@@ -128,9 +156,8 @@ class Round:
 
     @cached_property
     def id(self):
-        return uuid.uuid4().hex[:10]
+        return get_map_id(self.map)
 
     def __str__(self):
         return f"Map with id {self.id}: {self.ball_count} balls and {len(self.possible_moves)} possible moves"
-
 
